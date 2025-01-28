@@ -1,0 +1,70 @@
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier  # You can choose any classifier
+from sklearn.metrics import accuracy_score
+
+def m_smote(X, y, RS, T_low, T_high, classifier=RandomForestClassifier(), N=100):
+    """
+    Oversampling with M-SMOTE
+    
+    :param X: Matrix of all observations (features).
+    :param y: Labels corresponding to X (target values).
+    :param RS: Number of required samples to generate.
+    :param T_low: Lower threshold for probability.
+    :param T_high: Upper threshold for probability.
+    :param classifier: Classifier model to use for training.
+    :param N: Number of iterations for synthetic sample generation.
+    :return: Matrix of observations after oversampling (AX).
+    """
+
+    # Split the data into minority and majority class samples
+    X_min = X[y == 1]  # Assuming '1' represents the minority class
+    X_maj = X[y == 0]  # Assuming '0' represents the majority class
+    
+    AX_min = X_min.copy()
+    AX = np.vstack([AX_min, X_maj])
+
+    # Initialize the variable for new synthetic minority instances
+    X_newmin = []
+
+    while len(AX_min) < RS:
+        for _ in range(N):
+            # Step 1: Randomly select majority samples (equal to the number of minority samples)
+            S_maj = X_maj[np.random.choice(X_maj.shape[0], len(X_min), replace=False), :]
+            
+            # Step 2: Train the classifier using majority and minority class
+            C_model = classifier.fit(np.vstack([S_maj, X_min]), np.hstack([np.zeros(len(S_maj)), np.ones(len(X_min))]))
+            
+            # Step 3: Randomly select two minority instances
+            x_i_min, x_j_min = X_min[np.random.choice(X_min.shape[0], 2, replace=False), :]
+            
+            # Step 4: Synthesize new instance
+            y_val = np.random.random()
+            x_newmin = x_i_min + y_val * (x_i_min - x_j_min)
+            
+            # Step 5: Predict the class probability for the new instance
+            P_newmin = C_model.predict_proba([x_newmin])[0, 1]  # Probability of being in the minority class
+            
+            # Step 6: Compute average probability
+            P_X_newmin = P_newmin
+            
+        # Step 7: If the probability is within the thresholds, add to AX_min
+        if T_low <= P_X_newmin <= T_high:
+            AX_min = np.vstack([AX_min, x_newmin])
+
+    # Add the original minority instances to the oversampled set
+    AX_min = np.vstack([AX_min, X_min])
+
+    # Combine the oversampled minority class and majority class to form the final dataset
+    AX = np.vstack([AX_min, X_maj])
+    
+    return AX
+
+# Example usage:
+# X: Features matrix (2D numpy array)
+# y: Labels (1D numpy array, where 1 represents the minority class and 0 represents the majority class)
+# RS: Number of required samples to generate
+# T_low: Lower threshold for probability
+# T_high: Upper threshold for probability
+# classifier: Model to be used for training
+# AX = m_smote(X, y, RS=1000, T_low=0.2, T_high=0.8, classifier=RandomForestClassifier())

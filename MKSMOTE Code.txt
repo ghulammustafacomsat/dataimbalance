@@ -1,0 +1,68 @@
+import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.metrics.pairwise import euclidean_distances
+from imblearn.over_sampling import SMOTE
+
+def mk_smote(X_min, n, de, k):
+    """
+    Oversampling with MK-SMOTE
+    
+    :param X_min: The minority class instances.
+    :param n: The total number of samples to generate.
+    :param de: Exponent for density factor.
+    :param k: Number of nearest neighbors for SMOTE.
+    :return: Generated samples using MK-SMOTE.
+    """
+
+    # Step 1: Cluster the minority instances
+    kmeans = KMeans(n_clusters=10)  # You can modify the number of clusters
+    clusters = kmeans.fit_predict(X_min)
+
+    # Step 2: Compute sampling weights for each cluster
+    sparsity_factors = {}
+    for cluster in np.unique(clusters):
+        cluster_indices = np.where(clusters == cluster)[0]
+        cluster_points = X_min[cluster_indices]
+
+        # Mean Euclidean distances within the cluster
+        distances = euclidean_distances(cluster_points)
+        mean_distance = np.mean(distances)
+
+        # Density factor and sparsity factor
+        minority_count = len(cluster_points)
+        density_factor = (minority_count / (mean_distance ** de)) if mean_distance != 0 else 0
+        sparsity_factor = 1 / density_factor if density_factor != 0 else 0
+        sparsity_factors[cluster] = sparsity_factor
+
+    # Compute sparsity sum
+    sparsity_sum = sum(sparsity_factors.values())
+
+    # Compute the sampling weight for each cluster
+    sampling_weights = {cluster: sparsity_factor / sparsity_sum for cluster, sparsity_factor in sparsity_factors.items()}
+
+    # Step 3: Oversample each cluster using SMOTE
+    smote = SMOTE(sampling_strategy='auto', k_neighbors=k)
+    generated_samples = []
+
+    for cluster, weight in sampling_weights.items():
+        # Determine the number of samples to generate
+        num_samples = int(np.floor(n * weight))
+
+        # Select the instances in the current cluster
+        cluster_indices = np.where(clusters == cluster)[0]
+        cluster_points = X_min[cluster_indices]
+
+        # Apply SMOTE to the cluster
+        X_resampled, _ = smote.fit_resample(cluster_points, [0] * len(cluster_points))  # Use dummy target values
+
+        # Select only the required number of samples
+        generated_samples.extend(X_resampled[:num_samples])
+
+    return np.array(generated_samples)
+
+# Example usage:
+# X_min: minority class instances (2D numpy array)
+# n: total number of samples to generate
+# de: exponent for density factor
+# k: number of nearest neighbors for SMOTE
+# generated_samples = mk_smote(X_min, n=1000, de=2, k=5)
